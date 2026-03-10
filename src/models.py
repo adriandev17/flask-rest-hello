@@ -1,59 +1,67 @@
-import enum
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import String, ForeignKey, Enum
-from sqlalchemy.orm import Mapped, mapped_column
 
 db = SQLAlchemy()
 
-
-class MediaType(enum.Enum):
-    image = "image"
-    video = "video"
-    carousel = "carousel"
-
-
 class User(db.Model):
     __tablename__ = 'user'
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(80), unique=False, nullable=False)
+    is_active = db.Column(db.Boolean(), unique=False, nullable=False, default=True)
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(String(50), nullable=False)
-    firstname: Mapped[str] = mapped_column(String(50), nullable=False)
-    lastname: Mapped[str] = mapped_column(String(50), nullable=False)
-    email: Mapped[str] = mapped_column(
-        String(120), unique=True, nullable=False)
+    # ESTO ES LO QUE FALTA: La conexión bidireccional
+    # Permite hacer: "user_actual.favorites" y obtener su lista
+    favorites = db.relationship('Favorite', backref='user', lazy=True)
 
+    def __repr__(self):
+        return f'<User {self.email}>'
 
-class Follower(db.Model):
-    __tablename__ = 'follower'
+    def serialize(self):
+        return {
+            "id": self.id,
+            "email": self.email,
+            "favorites": [fav.serialize() for fav in self.favorites] # Ahora puedes incluir sus favoritos aquí
+        }
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_from_id: Mapped[int] = mapped_column(
-        ForeignKey('user.id'), nullable=False)
-    user_to_id: Mapped[int] = mapped_column(
-        ForeignKey('user.id'), nullable=False)
+class People(db.Model):
+    __tablename__ = 'people'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    gender = db.Column(db.String(20))
+    
+    # Relación: Para saber quiénes tienen a este personaje como favorito
+    favorites = db.relationship('Favorite', backref='people', lazy=True)
 
+    def serialize(self):
+        return {"id": self.id, "name": self.name}
 
-class Post(db.Model):
-    __tablename__ = 'post'
+class Planet(db.Model):
+    __tablename__ = 'planet'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    
+    # Relación: Para saber en qué listas de favoritos está este planeta
+    favorites = db.relationship('Favorite', backref='planet', lazy=True)
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey('user.id'), nullable=False)
+    def serialize(self):
+        return {"id": self.id, "name": self.name}
 
+class Favorite(db.Model):
+    __tablename__ = 'favorite'
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Las ForeignKeys (Los cables)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    planet_id = db.Column(db.Integer, db.ForeignKey('planet.id'), nullable=True)
+    people_id = db.Column(db.Integer, db.ForeignKey('people.id'), nullable=True)
 
-class Media(db.Model):
-    __tablename__ = 'media'
+    # Nota: No necesitamos poner relationship aquí porque usamos 'backref' arriba.
+    # Gracias al backref, el objeto 'Favorite' ya tiene .user, .planet y .people automáticamente.
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    type: Mapped[MediaType] = mapped_column(Enum(MediaType), nullable=False)
-    url: Mapped[str] = mapped_column(String(250), nullable=False)
-    post_id: Mapped[int] = mapped_column(ForeignKey('post.id'), nullable=False)
-
-
-class Comment(db.Model):
-    __tablename__ = 'comment'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    comment_text: Mapped[str] = mapped_column(String(500), nullable=False)
-    author_id: Mapped[int] = mapped_column(
-        ForeignKey('user.id'), nullable=False)
-    post_id: Mapped[int] = mapped_column(ForeignKey('post.id'), nullable=False)
+    def serialize(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "planet": self.planet.serialize() if self.planet else None, # Acceso directo gracias al relationship
+            "people": self.people.serialize() if self.people else None
+        }
